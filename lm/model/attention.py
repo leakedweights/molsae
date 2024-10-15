@@ -3,7 +3,7 @@ import jax
 import flax.linen as nn
 import jax.numpy as jnp
 
-from molsae.lm.model.transformer_utils import WeightedEinsum, RoPE
+from transformer_utils import WeightedEinsum, RoPE
 
 class GroupedQueryAttention(nn.Module):
     """Adapted from https://arxiv.org/abs/2408.00118"""
@@ -22,7 +22,7 @@ class GroupedQueryAttention(nn.Module):
         g = kg // k
         s = k_proj.shape[-3]
         q_proj = q_proj.reshape((b, t, k, g, h))
-        logits = jnp.einsum('BTKGH,BSKH->BTKGS', q_proj, k_proj)
+        logits = jnp.einsum("BTKGH,BSKH->BTKGS", q_proj, k_proj)
         logits = logits.reshape((b, t, kg, s))
         return logits
 
@@ -31,17 +31,17 @@ class GroupedQueryAttention(nn.Module):
         k = self.num_kv_heads
         g = kg // k
         probs = probs.reshape((b, t, k, g, h))
-        enc = jnp.einsum('BTKGS,BSKH->BTKGH', probs, v_proj)
+        enc = jnp.einsum("BTKGS,BSKH->BTKGH", probs, v_proj)
         b, t, k, g, h = enc.shape
         enc = enc.reshape((b, t, k*g, h))
         return enc
 
     def _vanilla_attn_inner(self, q_proj, k_proj):
-        logits = jnp.einsum('BTNH,BSNH->BTNS', q_proj, k_proj)
+        logits = jnp.einsum("BTNH,BSNH->BTNS", q_proj, k_proj)
         return logits
 
     def _vanilla_attn_outer(self, probs, v_proj):
-        enc = jnp.einsum('BTNS,BSNH->BTNH', probs, v_proj)
+        enc = jnp.einsum("BTNS,BSNH->BTNH", probs, v_proj)
         return enc
 
     @nn.compact
@@ -72,5 +72,5 @@ class GroupedQueryAttention(nn.Module):
         probs = jax.nn.softmax(logits, axis=-1).astype(k_proj.dtype)
 
         enc = attn_outer(probs, v_proj)
-        out = WeightedEinsum(wout_shape)('BTNH,NHD->BTD', enc)
+        out = WeightedEinsum(wout_shape)("BTNH,NHD->BTD", enc)
         return out

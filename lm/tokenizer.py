@@ -100,7 +100,7 @@ class SmilesTokenizer:
         return seq
 
     def _tokenize(self, seq, extras):
-        extras_re = r'(' + '|'.join(map(re.escape, extras)) + r')'
+        extras_re = r"(" + "|".join(map(re.escape, extras)) + r")"
 
         split_extras = re.split(extras_re, seq)
 
@@ -117,26 +117,26 @@ class SmilesTokenizer:
 
     def save(self, path):
         data = {
-            'special_tokens': self.special_tokens,
-            'mappings': self.mappings,
-            'itostr': self.itostr,
-            'strtoi': self.strtoi,
-            'template': self.template,
+            "special_tokens": self.special_tokens,
+            "mappings": self.mappings,
+            "itostr": self.itostr,
+            "strtoi": self.strtoi,
+            "template": self.template,
         }
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             pickle.dump(data, f)
         print(f"Tokenizer saved to {path}")
 
     def load(self, path):
         if not os.path.exists(path):
-            raise FileNotFoundError(f"No such file: '{path}'")
-        with open(path, 'rb') as f:
+            raise FileNotFoundError(f"No such file: \"{path}\"")
+        with open(path, "rb") as f:
             data = pickle.load(f)
-        self.special_tokens = data['special_tokens']
-        self.mappings = data['mappings']
-        self.itostr = data['itostr']
-        self.strtoi = data['strtoi']
-        self.template = data['template']
+        self.special_tokens = data["special_tokens"]
+        self.mappings = data["mappings"]
+        self.itostr = data["itostr"]
+        self.strtoi = data["strtoi"]
+        self.template = data["template"]
         print(f"Tokenizer loaded from {path}")
 
     def __getitem__(self, token_id):

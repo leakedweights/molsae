@@ -30,7 +30,7 @@ class WeightedEinsum(nn.Module):
 
     @nn.compact
     def __call__(self, literal: str, x: jax.Array):
-        w = self.param('w', nn.initializers.glorot_normal(), self.dim)
+        w = self.param("w", nn.initializers.glorot_normal(), self.dim)
         return jnp.einsum(literal, x, w)
     
 class Embedder(nn.Module):
@@ -40,7 +40,7 @@ class Embedder(nn.Module):
 
     def setup(self):
         self.input_embedding_table = self.param(
-            'input_embedding',
+            "input_embedding",
             nn.initializers.normal(),
             (self.vocab_size, self.embed_dim),
         )
@@ -63,8 +63,8 @@ class FeedForward(nn.Module):
         out_dims = (self.hidden_dim, self.features)
         w_init = jax.nn.initializers.glorot_normal()
 
-        w1, w2 = self.param('weights_in', w_init, in_dims)
-        w3 = self.param('weights_out', w_init, out_dims)
+        w1, w2 = self.param("weights_in", w_init, in_dims)
+        w3 = self.param("weights_out", w_init, out_dims)
         y = nn.silu(jnp.dot(x, w1))
         x = y * jnp.dot(x, w2)
         output = jnp.dot(x, w3)

@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import flax.linen as nn
 
 from attention import GroupedQueryAttention
-from molsae.lm.model.transformer_utils import Embedder, FeedForward
+from transformer_utils import Embedder, FeedForward
 
 class TransformerBlock(nn.Module):
     d_model: int
