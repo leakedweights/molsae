@@ -1,0 +1,37 @@
+{
+  "os":  "Linux-6.1.85+-x86_64-with-glibc2.35",
+  "python":  "3.10.12",
+  "startedAt":  "2024-10-17T16:50:09.768520Z",
+  "program":  "Run_MolSAE.ipynb",
+  "git":  {
+    "remote":  "https://github.com/leakedweights/molsae.git",
+    "commit":  "e40a91b10382ad385a2f70dbab6322bea2eca1ed"
+  },
+  "email":  "kristof1232002@gmail.com",
+  "root":  "/content/molsae",
+  "host":  "24055699d7c3",
+  "username":  "root",
+  "executable":  "/usr/bin/python3",
+  "colab":  "https://colab.research.google.com/notebook#fileId=1NalONNU-QWjtvx4xOh2KpWp_cgqMUtdr",
+  "cpu_count":  48,
+  "cpu_count_logical":  96,
+  "disk":  {
+    "/":  {
+      "total":  "241948286976",
+      "used":  "20472328192"
+    }
+  },
+  "memory":  {
+    "total":  "359233150976"
+  },
+  "cpu":  {
+    "count":  48,
+    "countLogical":  96
+  },
+  "tpu":  {
+    "name":  "v2",
+    "hbmGib":  8,
+    "devicesPerChip":  2,
+    "count":  1
+  }
+}

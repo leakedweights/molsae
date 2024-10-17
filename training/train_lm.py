@@ -39,7 +39,7 @@ def lm_train_step(state, batch, pad_token_id):
     state = state.apply_gradients(grads=grads)
     return state, loss
 
-def evaluate(state, eval_step, get_eval_dataset, max_eval_batches=None):
+def evaluate(state, eval_step, get_eval_dataset, pad_token_id, max_eval_batches=None):
     val_iter = iter(get_eval_dataset())
     total_eval_loss = 0.0
     num_eval_batches = 0
@@ -48,7 +48,7 @@ def evaluate(state, eval_step, get_eval_dataset, max_eval_batches=None):
             val_batch = next(val_iter)
         except StopIteration:
             break
-        eval_loss = eval_step(state, val_batch)
+        eval_loss = eval_step(state, val_batch, pad_token_id)
         total_eval_loss += eval_loss
         num_eval_batches += 1
         if max_eval_batches and num_eval_batches >= max_eval_batches:
@@ -74,7 +74,7 @@ def lm_eval_step(state, batch, pad_token_id):
 
     return loss
 
-def train(model, train_ds, get_eval_ds, config, rng=random.key(0)):
+def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
     total_steps = config.get("num_steps")
     run_id = config.get("run_id", "default-run")
     checkpoint_base = config.get("ckpt_base_dir", "/tmp/checkpoints/")
@@ -91,21 +91,23 @@ def train(model, train_ds, get_eval_ds, config, rng=random.key(0)):
     state, train_step = try_restore_for(state, checkpoint_dir)
 
     with trange(train_step, total_steps, initial=train_step, total=total_steps) as steps:
+        acc_loss = 0.0
 
         for step in steps:
             batch = jax.device_put(next(train_ds), sharding)
-            state, loss = lm_train_step(state, batch)
+            state, loss = lm_train_step(state, batch, tokenizer.pad_token_id)
 
             steps.set_postfix(loss=loss)
 
             if (step + 1) % 100 == 0:
-                wandb.log({"train_loss": loss}, step=step + 1)
+                wandb.log({"train_loss": acc_loss / 100}, step=step + 1)
+                acc_loss = 0.0
 
             if (step + 1) % 10_000 == 0:
                 save_checkpoint(checkpoint_dir, step + 1, state)
 
             if step % 1000 == 0:
-                eval_results = evaluate(state, get_eval_ds)
+                eval_results = evaluate(state, lm_eval_step, get_eval_ds, tokenizer.pad_token_id)
                 wandb.log(eval_results, step=step)
 
     wandb.finish()
