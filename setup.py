@@ -11,7 +11,6 @@ setup(
         "flax>=0.10.0",
         "optax>=0.1.9",
         "tensorflow>=2.17.0",
-        "git+https://github.com/google/orbax/#subdirectory=checkpoint",
         "numpy",
         "scipy",
         "rdkit",

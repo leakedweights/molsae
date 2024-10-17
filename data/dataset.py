@@ -6,7 +6,7 @@ import pandas as pd
 from tqdm import tqdm
 import tensorflow as tf
 
-from lm.tokenizer import SmilesTokenizer
+from lm.tokenizer import SmilesTokenizer, preprocess
 
 tf.config.set_visible_devices([], 'GPU')
 for logical_device in tf.config.list_logical_devices('TPU'):
@@ -21,9 +21,6 @@ def save_tokenized_ds(project_dir):
     file_path = "zinc15_10M_2D.csv"
     tokenized_mol_path = f"{project_dir}/zinc_tokenized.npy"
     tokenizer_path = f"{project_dir}/zinc_tokenizer.pkl"
-
-    def preprocess(sequence, extras):
-        return f"{extras['start']}{sequence}{extras['end']}"
 
     if not os.path.exists(tokenizer_path):
         print("Downloading dataset...")

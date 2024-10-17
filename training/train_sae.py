@@ -2,7 +2,7 @@ import  jax
 import jax.numpy as jnp
 from functools import partial
 
-from train_utils import setup
+from .train_utils import setup
 
 @partial(jax.jit, static_argnums=(2,))
 def sae_train_step(state, actv, w_recons):

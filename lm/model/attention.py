@@ -3,7 +3,7 @@ import jax
 import flax.linen as nn
 import jax.numpy as jnp
 
-from transformer_utils import WeightedEinsum, RoPE
+from .transformer_utils import WeightedEinsum, RoPE
 
 class GroupedQueryAttention(nn.Module):
     """Adapted from https://arxiv.org/abs/2408.00118"""

@@ -4,6 +4,9 @@ import pickle
 import pandas as pd
 from tqdm import tqdm
 
+def preprocess(sequence, extras):
+    return f"{extras['start']}{sequence}{extras['end']}"
+
 class SmilesTokenizer:
     def __init__(self, csv_source=None, num_reserved_tokens=0, dest=None, template=None):
         self.template = template

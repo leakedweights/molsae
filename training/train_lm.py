@@ -5,11 +5,11 @@ import jax.numpy as jnp
 from flax.training import train_state
 
 import wandb
-from tqdm.contrib import trange
+from tqdm import trange
 from functools import partial
 
 from lm.model.transformer_utils import causal_mask
-from train_utils import setup, try_restore_for, create_sharding, save_checkpoint
+from .train_utils import setup, try_restore_for, create_sharding, save_checkpoint
 
 def create_lm_train_state(rng, model, learning_rate):
   params = model.init(rng, jnp.ones((1, 1), dtype=jnp.int32), jnp.ones((1, 1), dtype=jnp.int32),
@@ -83,7 +83,7 @@ def train(model, train_ds, get_eval_ds, config, rng=random.key(0)):
     setup(project_name=config.get("project_name", "MolSAE"),
           run_id=run_id,
           checkpoint_dir=checkpoint_dir,
-          allow_resume=config.get("resume", True))
+          resume=config.get("resume", True))
     
     sharding = create_sharding()
     
