@@ -106,7 +106,7 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
             if (step + 1) % 10_000 == 0:
                 save_checkpoint(checkpoint_dir, step + 1, state)
 
-            if step % 1000 == 0:
+            if (step + 1) % 1000 == 0:
                 eval_results = evaluate(state, lm_eval_step, get_eval_ds, tokenizer.pad_token_id)
                 wandb.log(eval_results, step=step)
 
