@@ -72,5 +72,6 @@ class GroupedQueryAttention(nn.Module):
         probs = jax.nn.softmax(logits, axis=-1).astype(k_proj.dtype)
 
         enc = attn_outer(probs, v_proj)
+
         out = WeightedEinsum(wout_shape)("BTNH,NHD->BTD", enc)
         return out
