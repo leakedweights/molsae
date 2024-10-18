@@ -96,20 +96,18 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
         for step in steps:
             batch = jax.device_put(next(train_ds), sharding)
             state, loss = lm_train_step(state, batch, tokenizer.pad_token_id)
-            
-            if step >= 4999:
-                acc_loss += loss
+            acc_loss += loss
 
             steps.set_postfix(loss=loss)
 
-            if (step + 1) % 100 == 0 and step >= 5099:
+            if (step + 1) % 100 == 0:
                 wandb.log({"train_loss": acc_loss / 100}, step=step + 1)
                 acc_loss = 0.0
 
             if (step + 1) % 10_000 == 0:
                 save_checkpoint(checkpoint_dir, step + 1, state)
 
-            if (step + 1) % 1000 == 0 and step >= 4999:
+            if (step + 1) % 1000 == 0:
                 eval_results = evaluate(state, lm_eval_step, get_eval_ds, tokenizer.pad_token_id)
                 wandb.log(eval_results, step=step)
 
