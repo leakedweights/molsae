@@ -85,10 +85,10 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
           checkpoint_dir=checkpoint_dir,
           resume=config.get("resume", True))
     
-    sharding = create_sharding()
+    sharding, mesh = create_sharding()
     
     state = create_lm_train_state(rng, model, learning_rate=config.get("learning_rate"))
-    state, train_step = try_restore_for(state, checkpoint_dir)
+    state, train_step = try_restore_for(state, checkpoint_dir, mesh)
 
     with trange(train_step, total_steps, initial=train_step, total=total_steps) as steps:
         acc_loss = 0.0

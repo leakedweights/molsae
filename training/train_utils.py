@@ -14,7 +14,13 @@ def setup(project_name, run_id, checkpoint_dir, resume):
 def create_sharding():
     mesh = jax.make_mesh((jax.local_device_count(),), ("x",))
     sharding = NamedSharding(mesh, PartitionSpec("x",))
-    return sharding
+    return sharding, mesh
+
+def reshard_state(state, mesh):
+    replicate_sharding = NamedSharding(mesh, PartitionSpec())
+    def reshard_leaf(x):
+        return jax.device_put(x, replicate_sharding)
+    return jax.tree.map(reshard_leaf, state)
 
 def get_mol_stats(smiles_str):
     mol = Chem.MolFromSmiles(smiles_str)
@@ -37,7 +43,7 @@ def save_checkpoint(dir, step, state):
     ) as mngr:
         mngr.save(step, args=ocp.args.StandardSave(state))
 
-def try_restore_for(item, dir):
+def try_restore_for(item, dir, mesh=None):
     try:
         options = ocp.CheckpointManagerOptions()
         with ocp.CheckpointManager(
@@ -45,6 +51,11 @@ def try_restore_for(item, dir):
             options=options,
         ) as mngr:
             step = mngr.latest_step()
-            return mngr.restore(step, args=ocp.args.StandardRestore(item)), step
+            state = mngr.restore(step, args=ocp.args.StandardRestore(item))
+
+            if mesh is not None:
+                state = reshard_state(state, mesh)
+
+            return state, step
     except:
         return item, 0
