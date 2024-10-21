@@ -39,13 +39,13 @@ class TransformerBlock(nn.Module):
         y = FeedForward(self.d_model, self.hidden_dim)(y)
         y = nn.RMSNorm()(x)
 
-        # MLP Post-norm SAE
+        # MLP Post-norm SAE activations
         if self.tracked:
-            self.sow("activations", "mlp_outs", y)
+            self.sow("activations", "mlp_outputs", y)
 
         x = x + y
 
-        # Residual SAE
+        # Residual SAE activations
         if self.tracked:
             self.sow("activations", "residual_stream", x)
 
@@ -63,6 +63,7 @@ class Decoder(nn.Module):
     layer_logit_cap: float = 50.0
     final_logit_cap: float = 30.0
     f_embed: int = 10_000
+    tracked: bool = False
 
     @nn.compact
     def __call__(self, x, pos, mask):
@@ -76,7 +77,8 @@ class Decoder(nn.Module):
                                  self.num_heads,
                                  self.num_kv_heads,
                                  self.layer_logit_cap,
-                                 self.f_embed)(x, pos, mask)
+                                 self.f_embed,
+                                 self.tracked)(x, pos, mask)
 
         x = nn.RMSNorm()(x)
 
