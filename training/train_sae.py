@@ -17,6 +17,8 @@ from lm.model.transformer_utils import causal_mask
 def create_sae_train_state(rng, model, learning_rate):
     params = model.init(rng, jnp.ones(1, model.latent_size,))["params"]
     tx = optax.adam(learning_rate)
+    print(
+        f"Created state with {sum(x.size for x in jax.tree.leaves(params))} parameters.")
     return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
 
 
@@ -35,12 +37,15 @@ def sae_train_step(state, actv, w_recons):
     state = state.apply_gradients(grads=grads)
     return state, loss
 
+
 def save_activations(model, params, molecules, config):
     assert model.tracked, "Model must be tracked to save activations!"
 
     output_dir = config["output_dir"]
-    residual_dirs = [f"{output_dir}/block_{layer}/residual_stream" for layer in range(model.num_layers)]
-    mlp_dirs = [f"{output_dir}/block_{layer}/mlp" for layer in range(model.num_layers)]
+    residual_dirs = [
+        f"{output_dir}/block_{layer}/residual_stream" for layer in range(model.num_layers)]
+    mlp_dirs = [
+        f"{output_dir}/block_{layer}/mlp" for layer in range(model.num_layers)]
 
     for i in range(model.num_layers):
         os.makedirs(residual_dirs[i], exist_ok=True)

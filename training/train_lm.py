@@ -11,11 +11,15 @@ from functools import partial
 from lm.model.transformer_utils import causal_mask
 from .train_utils import setup, try_restore_for, create_sharding, save_checkpoint
 
+
 def create_lm_train_state(rng, model, learning_rate):
-  params = model.init(rng, jnp.ones((1, 1), dtype=jnp.int32), jnp.ones((1, 1), dtype=jnp.int32),
-                      jnp.ones((1, 1, 1), dtype=jnp.bool))["params"]
-  tx = optax.adam(learning_rate)
-  return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
+    params = model.init(rng, jnp.ones((1, 1), dtype=jnp.int32), jnp.ones((1, 1), dtype=jnp.int32),
+                        jnp.ones((1, 1, 1), dtype=jnp.bool))["params"]
+    tx = optax.adam(learning_rate)
+    print(
+        f"Created state with {sum(x.size for x in jax.tree.leaves(params))} parameters.")
+    return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
+
 
 @partial(jax.jit, static_argnums=(2,))
 def lm_train_step(state, batch, pad_token_id):
@@ -27,7 +31,8 @@ def lm_train_step(state, batch, pad_token_id):
         logits = logits[:, :-1, :]
         labels = batch[:, 1:]
 
-        per_token_loss = optax.softmax_cross_entropy_with_integer_labels(logits, labels)
+        per_token_loss = optax.softmax_cross_entropy_with_integer_labels(
+            logits, labels)
 
         loss_mask = (labels != pad_token_id)
         loss = jnp.mean(per_token_loss * loss_mask)
@@ -38,6 +43,7 @@ def lm_train_step(state, batch, pad_token_id):
     loss, grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
     return state, loss
+
 
 def evaluate(state, eval_step, get_eval_dataset, pad_token_id, max_eval_batches=None):
     val_iter = iter(get_eval_dataset())
@@ -58,6 +64,7 @@ def evaluate(state, eval_step, get_eval_dataset, pad_token_id, max_eval_batches=
 
     return {"eval_loss": avg_eval_loss}
 
+
 @partial(jax.jit, static_argnums=(2,))
 def lm_eval_step(state, batch, pad_token_id):
     mask = causal_mask(batch, pad_token_id)
@@ -67,12 +74,14 @@ def lm_eval_step(state, batch, pad_token_id):
     logits = logits[:, :-1, :]
     labels = batch[:, 1:]
 
-    per_token_loss = optax.softmax_cross_entropy_with_integer_labels(logits, labels)
+    per_token_loss = optax.softmax_cross_entropy_with_integer_labels(
+        logits, labels)
 
     loss_mask = (labels != pad_token_id)
     loss = jnp.mean(per_token_loss * loss_mask)
 
     return loss
+
 
 def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
     total_steps = config.get("num_steps")
@@ -84,10 +93,11 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
           run_id=run_id,
           checkpoint_dir=checkpoint_dir,
           resume=config.get("resume", True))
-    
+
     sharding, mesh = create_sharding()
-    
-    state = create_lm_train_state(rng, model, learning_rate=config.get("learning_rate"))
+
+    state = create_lm_train_state(
+        rng, model, learning_rate=config.get("learning_rate"))
     state, train_step = try_restore_for(state, checkpoint_dir, mesh)
 
     with trange(train_step, total_steps, initial=train_step, total=total_steps) as steps:
@@ -108,7 +118,8 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
                 save_checkpoint(checkpoint_dir, step + 1, state)
 
             if (step + 1) % 1000 == 0:
-                eval_results = evaluate(state, lm_eval_step, get_eval_ds, tokenizer.pad_token_id)
+                eval_results = evaluate(
+                    state, lm_eval_step, get_eval_ds, tokenizer.pad_token_id)
                 wandb.log(eval_results, step=step+1)
 
     wandb.finish()
