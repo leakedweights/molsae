@@ -30,11 +30,11 @@ class TransformerBlock(nn.Module):
 
         y = nn.RMSNorm()(x)
         y = FeedForward(self.d_model, self.hidden_dim)(y)
-        mlp_post_norm = nn.RMSNorm()(x)
+        mlp_post_norm = nn.RMSNorm()(y)
 
         residual = x + mlp_post_norm
         
-        return residual, ((mlp_post_norm, residual) if self.track else ())
+        return residual, ((mlp_post_norm, residual) if self.tracked else ())
 
 
 class Decoder(nn.Module):

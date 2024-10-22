@@ -106,7 +106,7 @@ def create_sae_mol_dataset(fpath, batch_size, num_examples, pad_token_id, sort_f
         padding_values=pad_token_id
     )
 
-    return molecule_dataset.as_numpy_itereator()
+    return molecule_dataset.as_numpy_iterator()
 
 def create_activation_dataset(base_dir, layer_id, site, batch_size, num_epochs):
     data_dir = os.path.join(base_dir, str(layer_id), site)

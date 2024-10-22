@@ -12,7 +12,7 @@ from lm.model.transformer_utils import causal_mask
 from .train_utils import setup, try_restore_for, create_sharding, save_checkpoint
 
 
-def create_lm_train_state(rng, model, learning_rate):
+def create_lm_train_state(model, rng=random.key(0), learning_rate=0.0):
     params = model.init(rng, jnp.ones((1, 1), dtype=jnp.int32), jnp.ones((1, 1), dtype=jnp.int32),
                         jnp.ones((1, 1, 1), dtype=jnp.bool))["params"]
     tx = optax.adam(learning_rate)
@@ -97,7 +97,7 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
     sharding, mesh = create_sharding()
 
     state = create_lm_train_state(
-        rng, model, learning_rate=config.get("learning_rate"))
+        model, rng, learning_rate=config.get("learning_rate"))
     state, train_step = try_restore_for(state, checkpoint_dir, mesh)
 
     with trange(train_step, total_steps, initial=train_step, total=total_steps) as steps:
