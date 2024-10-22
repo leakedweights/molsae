@@ -87,7 +87,7 @@ def create_lm_dataset(fpath, train_bsize, pad_token_id, buffer_size=500_000, eva
     return train_dataset.as_numpy_iterator(), get_eval_ds
 
 
-def create_sae_mol_dataset(fpath, batch_size, num_examples, epochs, pad_token_id, sort_fn=None):
+def create_sae_mol_dataset(fpath, batch_size, num_examples, pad_token_id, sort_fn=None):
     data = np.load(fpath, allow_pickle=True)
 
     if sort_fn is not None:
