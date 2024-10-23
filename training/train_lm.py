@@ -89,10 +89,10 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
     checkpoint_base = config.get("ckpt_base_dir", "/tmp/checkpoints/")
     checkpoint_dir = f"{checkpoint_base}/{run_id}"
 
-    setup(project_name=config.get("project_name", "MolSAE"),
-          run_id=run_id,
-          checkpoint_dir=checkpoint_dir,
-          resume=config.get("resume", True))
+    run = setup(project_name=config.get("project_name", "MolSAE"),
+                run_id=run_id,
+                checkpoint_dir=checkpoint_dir,
+                resume=config.get("resume", True))
 
     sharding, mesh = create_sharding()
 
@@ -111,7 +111,7 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
             steps.set_postfix(loss=loss)
 
             if (step + 1) % 100 == 0:
-                wandb.log({"train_loss": acc_loss / 100}, step=step + 1)
+                run.log({"train_loss": acc_loss / 100}, step=step + 1)
                 acc_loss = 0.0
 
             if (step + 1) % 10_000 == 0:
@@ -120,6 +120,6 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
             if (step + 1) % 1000 == 0:
                 eval_results = evaluate(
                     state, lm_eval_step, get_eval_ds, tokenizer.pad_token_id)
-                wandb.log(eval_results, step=step+1)
+                run.log(eval_results, step=step+1)
 
-    wandb.finish()
+    run.finish()

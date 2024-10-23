@@ -71,6 +71,8 @@ def create_lm_dataset(fpath, train_bsize, pad_token_id, buffer_size=500_000, eva
         padding_values=pad_token_id
     )
     train_dataset = train_dataset.repeat()
+    train_dataset = train_dataset.cache()
+    train_dataset = train_dataset.prefetch(tf.data.AUTOTUNE)
 
     def get_eval_ds():
         val_dataset = tf.data.Dataset.from_generator(
@@ -82,6 +84,7 @@ def create_lm_dataset(fpath, train_bsize, pad_token_id, buffer_size=500_000, eva
             padded_shapes=[None],
             padding_values=pad_token_id
         )
+        val_dataset = val_dataset.prefetch(tf.data.AUTOTUNE)
         return val_dataset.as_numpy_iterator()
 
     return train_dataset.as_numpy_iterator(), get_eval_ds
@@ -108,26 +111,30 @@ def create_sae_mol_dataset(fpath, batch_size, num_examples, pad_token_id, sort_f
 
     return molecule_dataset.as_numpy_iterator()
 
+
 def create_activation_dataset(base_dir, layer_id, site, batch_size, num_epochs):
     data_dir = os.path.join(base_dir, str(layer_id), site)
 
-    file_list = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.npy')]
+    file_list = [os.path.join(data_dir, f)
+                 for f in os.listdir(data_dir) if f.endswith('.npy')]
     file_list.sort(key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
-    
+
     dataset = tf.data.Dataset.from_tensor_slices(file_list)
-    
+
     def load_npy_file(file_path):
         npy = np.load(file_path.numpy().decode('utf-8'))
         return npy
 
     def tf_load_npy_file(file_path):
-        npy_tensor = tf.py_function(func=load_npy_file, inp=[file_path], Tout=tf.float32)
+        npy_tensor = tf.py_function(func=load_npy_file, inp=[
+                                    file_path], Tout=tf.float32)
         npy_tensor.set_shape([None, None])
         return npy_tensor
 
-    dataset = dataset.map(tf_load_npy_file, num_parallel_calls=tf.data.AUTOTUNE)
+    dataset = dataset.map(
+        tf_load_npy_file, num_parallel_calls=tf.data.AUTOTUNE)
     dataset = dataset.batch(batch_size)
     dataset = dataset.repeat(num_epochs)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
-    
+
     return dataset

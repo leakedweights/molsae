@@ -10,10 +10,11 @@ import orbax.checkpoint as ocp
 from lm.model.transformer_utils import causal_mask
 
 def setup(project_name, run_id, checkpoint_dir, resume):
-    wandb.init(project=project_name,
+    run = wandb.init(project=project_name,
                id=run_id,
                resume="allow" if resume else "never")
     os.makedirs(checkpoint_dir, exist_ok=True)
+    return run
 
 def create_sharding():
     mesh = jax.make_mesh((jax.local_device_count(),), ("x",))
