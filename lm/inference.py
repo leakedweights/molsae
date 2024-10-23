@@ -39,7 +39,7 @@ def strip_molecules(input, bom_token, eom_token):
     return molecules
 
 
-@partial(jax.jit, static_argnums=(5, 6, 7))
+@partial(jax.jit, static_argnums=(1, 2, 5, 6, 7))
 def generate_sequence(key, apply_fn, params, initial_tokens, pad_token_id, max_length, forbidden_tokens=None, temperature=1.0, top_k=-1):
     batch_size, seq_length = initial_tokens.shape
 
