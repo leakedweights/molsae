@@ -114,7 +114,7 @@ def train(model, train_ds, get_eval_ds, tokenizer, config, rng=random.key(0)):
                 run.log({"train_loss": acc_loss / 100}, step=step + 1)
                 acc_loss = 0.0
 
-            if (step + 1) % 10_000 == 0:
+            if (step + 1) % config.get("ckpt_frequency", 10_000) == 0:
                 save_checkpoint(checkpoint_dir, step + 1, state)
 
             if (step + 1) % 1000 == 0:
