@@ -113,7 +113,7 @@ def create_sae_mol_dataset(fpath, batch_size, num_examples, pad_token_id, sort_f
 
 
 def create_activation_dataset(base_dir, layer_id, site, batch_size, num_epochs):
-    data_dir = os.path.join(base_dir, str(layer_id), site)
+    data_dir = os.path.join(base_dir, f"block_{layer_id}", site)
 
     file_list = [os.path.join(data_dir, f)
                  for f in os.listdir(data_dir) if f.endswith('.npy')]

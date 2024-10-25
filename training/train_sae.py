@@ -13,7 +13,7 @@ from .train_utils import setup, try_restore_for, create_sharding, save_checkpoin
 
 
 def create_sae_train_state(rng, model, learning_rate):
-    params = model.init(rng, jnp.ones(1, model.latent_size,))["params"]
+    params = model.init(rng, jnp.ones((1, model.latent_size,)))["params"]
     tx = optax.adam(learning_rate)
     print(
         f"Created state with {sum(x.size for x in jax.tree.leaves(params))} parameters.")
