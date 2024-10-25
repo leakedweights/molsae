@@ -2,74 +2,120 @@ import jax
 import jax.numpy as jnp
 import flax.linen as nn
 
-from functools import partial
+"""JumpReLU utils from https://colab.research.google.com/drive/1PlFzI_PWGTN9yCQLuBcSuPJUjgHL7GiD"""
 
-def step(x, theta):
-        return (x > theta).astype(x.dtype)
+KDE_BANDWIDTH = 0.001
 
-def rect(z):
-    return step(z, -0.5) - step(z, 0.5)
 
-@jax.custom_vjp
-def heaviside(x, theta, bandwidth):
-    return (x > theta).astype(x.dtype)
+def rectangle(x):
+    return ((x > -0.5) & (x < 0.5)).astype(x.dtype)
 
-def heaviside_fwd(x, theta, bandwidth):
-    output = heaviside(x, theta, bandwidth)
-    residuals = (x, theta, bandwidth)
-    return output, residuals
-
-def heaviside_bwd(residuals, tangents):
-    x, theta, bandwidth = residuals
-
-    output_grad = (-1 / bandwidth) * rect((x - theta) / bandwidth)
-    theta_grad = tangents * jnp.sum(output_grad)
-
-    x_grad = jnp.zeros_like(x)
-    bandwidth_grad = jnp.zeros_like(bandwidth)
-    return (x_grad, theta_grad, bandwidth_grad)
-
-heaviside.defvjp(heaviside_fwd, heaviside_bwd)
 
 @jax.custom_vjp
-@partial(jax.vmap, in_axes=(0, None, None))
-def jumprelu(x, theta, bandwidth):
-    return x * heaviside(x, theta, bandwidth)
+def step(x, threshold):
+    return (x > threshold).astype(x.dtype)
 
-def jumprelu_fwd(x, theta, bandwidth):
-    out = jumprelu(x, theta, bandwidth)
-    residuals = (x, theta, bandwidth)
-    return out, residuals
 
-def jumprelu_bwd(residuals, tangents):
-    x, theta, bandwidth = residuals
-    x_grad = jnp.zeros_like(x)
-    d_out_d_theta = - x / bandwidth * rect((x - theta) / bandwidth)
-    threshold_grad = jnp.sum(d_out_d_theta * tangents, axis=0)
-    bandwidth_grad = jnp.zeros_like(bandwidth)
+def step_fwd(x, threshold):
+    out = step(x, threshold)
+    cache = x, threshold
+    return out, cache
 
-    return x_grad, threshold_grad, bandwidth_grad
+
+def step_bwd(cache, output_grad):
+    x, threshold = cache
+    x_grad = jnp.zeros_like(output_grad)
+    threshold_grad = jnp.sum(
+        -(1.0 / KDE_BANDWIDTH) *
+        rectangle((x - threshold) / KDE_BANDWIDTH) * output_grad,
+        axis=None,
+    )
+    threshold_grad = jnp.reshape(threshold_grad, threshold.shape)
+    return x_grad, threshold_grad
+
+
+step.defvjp(step_fwd, step_bwd)
+
+
+@jax.custom_vjp
+def jumprelu(x, threshold):
+    return x * (x > threshold)
+
+
+def jumprelu_fwd(x, threshold):
+    out = jumprelu(x, threshold)
+    cache = x, threshold
+    return out, cache
+
+
+def jumprelu_bwd(cache, output_grad):
+    x, threshold = cache
+    x_grad = (x > threshold).astype(x.dtype) * output_grad
+    threshold_grad = jnp.sum(
+        -(threshold / KDE_BANDWIDTH)
+        * rectangle((x - threshold) / KDE_BANDWIDTH)
+        * output_grad,
+        axis=None,
+    )
+    threshold_grad = jnp.reshape(threshold_grad, threshold.shape)
+    return x_grad, threshold_grad
+
 
 jumprelu.defvjp(jumprelu_fwd, jumprelu_bwd)
 
-class SAE(nn.Module):
-    latent_size: int
-    kde_bandwidth: float = 1e-3
+
+class JSAE(nn.Module):
+    """Flax module converted from https://colab.research.google.com/drive/1PlFzI_PWGTN9yCQLuBcSuPJUjgHL7GiD"""
+
+    # TODO: fix theta application
+
+    d_model: int
+    hidden_size: int
+    use_pre_enc_bias: bool = True
 
     @nn.compact
     def __call__(self, x):
-        input_dim = x.shape[-1]
+        W_enc = self.param(
+            'W_enc', nn.initializers.glorot_uniform(), (self.d_model, self.hidden_size))
+        b_enc = self.param('b_enc', nn.initializers.zeros, (self.hidden_size,))
+        W_dec = self.param(
+            'W_dec', nn.initializers.glorot_uniform(), (self.hidden_size, self.d_model))
+        b_dec = self.param('b_dec', nn.initializers.zeros, (self.d_model,))
+        log_threshold = self.param(
+            'log_threshold', nn.initializers.zeros, (self.hidden_size,))
 
-        W_enc = self.param('W_enc', nn.initializers.he_uniform(), (input_dim, self.latent_size))
-        b_enc = self.param('b_enc', nn.initializers.zeros, (self.latent_size,))
+        if self.use_pre_enc_bias:
+            x = x - b_dec
 
-        z_enc = jnp.matmul(x, W_enc) + b_enc
-        theta = self.param('theta', nn.initializers.he_uniform(), z_enc.shape)
-        enc = jumprelu(z_enc, theta, self.kde_bandwidth)
+        pre_activations = x @ W_enc + b_enc
+        threshold = jnp.exp(log_threshold)
+        feature_magnitudes = jumprelu(pre_activations, threshold)
 
-        W_dec = self.param('W_dec', nn.initializers.he_uniform(), (self.latent_size, input_dim))
-        b_dec = self.param('b_dec', nn.initializers.zeros, (input_dim,))
+        x_reconstructed = feature_magnitudes @ W_dec + b_dec
+        return x_reconstructed, pre_activations
 
-        dec = jnp.matmul(enc, W_dec) + b_dec
 
-        return enc, dec
+class RSAE(nn.Module):
+    """ReLU SAE from https://transformer-circuits.pub/2023/monosemantic-features"""
+
+    d_model: int
+    hidden_size: int
+    use_pre_enc_bias: bool = True
+
+    @nn.compact
+    def __call__(self, x):
+        W_enc = self.param(
+            'W_enc', nn.initializers.glorot_uniform(), (self.d_model, self.hidden_size))
+        b_enc = self.param('b_enc', nn.initializers.zeros, (self.hidden_size,))
+        W_dec = self.param(
+            'W_dec', nn.initializers.glorot_uniform(), (self.hidden_size, self.d_model))
+        b_dec = self.param('b_dec', nn.initializers.zeros, (self.d_model,))
+
+        if self.use_pre_enc_bias:
+            x = x - b_dec
+
+        pre_activations = x @ W_enc + b_enc
+        feature_magnitudes = nn.relu(pre_activations)
+
+        x_reconstructed = feature_magnitudes @ W_dec + b_dec
+        return x_reconstructed, feature_magnitudes

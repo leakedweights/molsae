@@ -112,29 +112,48 @@ def create_sae_mol_dataset(fpath, batch_size, num_examples, pad_token_id, sort_f
     return molecule_dataset.as_numpy_iterator()
 
 
-def create_activation_dataset(base_dir, layer_id, site, batch_size, num_epochs):
-    data_dir = os.path.join(base_dir, f"block_{layer_id}", site)
+def create_activation_dataset(base_dir, include_layers, include_sites, d_model, batch_size, num_epochs):
+    file_lists = []
+    for layer_id in include_layers:
+        for site in include_sites:
+            data_dir = os.path.join(base_dir, f"block_{layer_id}", site)
+            file_list = [os.path.join(data_dir, f)
+                         for f in os.listdir(data_dir) if f.endswith('.npy')]
+            file_list.sort(key=lambda x: int(
+                os.path.splitext(os.path.basename(x))[0]))
+            file_lists.append(file_list)
 
-    file_list = [os.path.join(data_dir, f)
-                 for f in os.listdir(data_dir) if f.endswith('.npy')]
-    file_list.sort(key=lambda x: int(os.path.splitext(os.path.basename(x))[0]))
+    num_files = len(file_lists[0])
+    for fl in file_lists:
+        assert len(
+            fl) == num_files, "All file lists must have the same number of files"
 
-    dataset = tf.data.Dataset.from_tensor_slices(file_list)
+    files_per_example = list(zip(*file_lists))
 
-    def load_npy_file(file_path):
-        npy = np.load(file_path.numpy().decode('utf-8'))
-        return npy
+    dataset = tf.data.Dataset.from_tensor_slices(files_per_example)
 
-    def tf_load_npy_file(file_path):
-        npy_tensor = tf.py_function(func=load_npy_file, inp=[
-                                    file_path], Tout=tf.float32)
-        npy_tensor.set_shape([None, None])
-        return npy_tensor
+    def load_npy_files(file_paths):
+        activations = []
+        for file_path in file_paths:
+            file_path = file_path.numpy().decode('utf-8')
+            npy = np.load(file_path)
+            activations.append(npy.astype(np.float32))
+        return activations
+
+    def tf_load_npy_files(file_paths):
+        npy_tensors = tf.py_function(func=load_npy_files, inp=[file_paths], Tout=[
+                                     tf.float32]*len(file_paths))
+        for tensor in npy_tensors:
+            tensor.set_shape([None, d_model])
+        return npy_tensors
 
     dataset = dataset.map(
-        tf_load_npy_file, num_parallel_calls=tf.data.AUTOTUNE)
-    dataset = dataset.batch(batch_size)
+        tf_load_npy_files, num_parallel_calls=tf.data.AUTOTUNE)
+    dataset = dataset.unbatch()
+    dataset = dataset.shuffle(buffer_size=10000)
+    dataset = dataset.batch(batch_size, drop_remainder=True)
     dataset = dataset.repeat(num_epochs)
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
+    dataset = dataset.as_numpy_iterator()
 
     return dataset

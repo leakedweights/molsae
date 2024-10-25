@@ -60,10 +60,10 @@ def try_restore_for(item, dir, mesh=None):
         return item, 0
 
 
-def save_activations(model, params, molecule_dataset, config, sharding):
+def save_activations(model, params, molecule_dataset, output_dir, pad_token_id, sharding):
     assert model.tracked, "Model must be tracked to save activations!"
 
-    output_dir = config["output_dir"]
+    output_dir = output_dir
     residual_dirs = [
         f"{output_dir}/block_{layer}/residual_stream" for layer in range(model.num_layers)]
     mlp_dirs = [
@@ -75,7 +75,7 @@ def save_activations(model, params, molecule_dataset, config, sharding):
 
     for batch_id, batch_seq in enumerate(tqdm(molecule_dataset)):
         jax.device_put(batch_seq, sharding)
-        mask = causal_mask(batch_seq, config["pad_token_id"]).astype(jnp.bool_)
+        mask = causal_mask(batch_seq, pad_token_id).astype(jnp.bool_)
 
         pos = jnp.arange(0, batch_seq.shape[1])
         _, activations = model.apply({"params": params}, batch_seq, pos, mask)
@@ -83,6 +83,7 @@ def save_activations(model, params, molecule_dataset, config, sharding):
         for i, layer_act in enumerate(activations):
             mlp_act, residual_act = layer_act
             mlp_act = jnp.reshape(mlp_act, (-1, mlp_act.shape[-1]))
-            residual_act = jnp.reshape(residual_act, (-1, residual_act.shape[-1]))
+            residual_act = jnp.reshape(
+                residual_act, (-1, residual_act.shape[-1]))
             np.save(f"{residual_dirs[i]}/{batch_id}.npy", residual_act)
             np.save(f"{mlp_dirs[i]}/{batch_id}.npy", mlp_act)

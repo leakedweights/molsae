@@ -1,76 +1,181 @@
 import jax
 import optax
-from jax import random
 import jax.numpy as jnp
 from flax.training import train_state
-import numpy as np
 
+import os
+from tqdm.auto import tqdm
 import wandb
-from tqdm import trange
-from functools import partial
 
-from .train_utils import setup, try_restore_for, create_sharding, save_checkpoint
+from sae.model import JSAE, RSAE, step
+from data.dataset import create_activation_dataset
+from .train_utils import save_checkpoint
 
 
-def create_sae_train_state(rng, model, learning_rate):
-    params = model.init(rng, jnp.ones((1, model.latent_size,)))["params"]
+def create_sae_train_state(rng, sae, learning_rate):
+    params = sae.init(rng, jnp.ones((1, sae.d_model)))['params']
     tx = optax.adam(learning_rate)
+
+    state = train_state.TrainState.create(
+        apply_fn=sae.apply,
+        params=params,
+        tx=tx
+    )
+
     print(
         f"Created state with {sum(x.size for x in jax.tree.leaves(params))} parameters.")
-    return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
+
+    return state
 
 
-@partial(jax.jit, static_argnums=(2,))
-def sae_train_step(state, actv, w_recons):
+def jsae_loss(model, params, x, sparsity_coefficient):
+    x_reconstructed, pre_activations = model.apply({'params': params}, x)
 
-    @jax.jit
-    def loss_fn(params):
-        enc, dec = state.apply_fn(params, actv)
-        recon_loss = jnp.mean((actv - dec) ** 2)
-        sparsity = jnp.count_nonzero(enc) / enc.size
-        return recon_loss + w_recons * sparsity
+    reconstruction_error = x - x_reconstructed
+    reconstruction_loss = jnp.sum(reconstruction_error**2, axis=-1)
 
-    loss, grads = jax.value_and_grad(loss_fn)(state.params)
+    threshold = jnp.exp(params['log_threshold'])
 
-    state = state.apply_gradients(grads=grads)
-    return state, loss
+    l0 = jnp.sum(step(pre_activations, threshold), axis=-1)
+    sparsity_loss = sparsity_coefficient * l0
+    total_loss = jnp.mean(reconstruction_loss + sparsity_loss)
+
+    avg_reconstruction_loss = jnp.mean(reconstruction_loss)
+    avg_sparsity_loss = jnp.mean(sparsity_loss)
+
+    return total_loss, {'reconstruction_loss': avg_reconstruction_loss, 'sparsity_loss': avg_sparsity_loss}
 
 
-def train(model, train_ds, config, rng=random.key(0)):
-    epochs = config.get("epochs")
-    run_id = config.get("run_id", "default-run")
-    checkpoint_base = config.get("ckpt_base_dir", "/tmp/checkpoints/")
-    checkpoint_dir = f"{checkpoint_base}/{run_id}"
+def rsae_loss(model, params, x, sparsity_coefficient):
+    x_reconstructed, feature_magnitudes = model.apply({'params': params}, x)
 
-    setup(project_name=config.get("project_name", "MolSAE"),
-          run_id=run_id,
-          checkpoint_dir=checkpoint_dir,
-          resume=config.get("resume", True))
+    reconstruction_error = x - x_reconstructed
+    reconstruction_loss = jnp.sum(reconstruction_error**2, axis=-1)
+    sparsity_loss = jnp.sum(feature_magnitudes, axis=-1)
+    scaled_sparsity_loss = sparsity_coefficient * sparsity_loss
 
-    sharding, mesh = create_sharding()
+    total_loss = jnp.mean(reconstruction_loss + scaled_sparsity_loss)
+    avg_reconstruction_loss = jnp.mean(reconstruction_loss)
+    avg_sparsity_loss = jnp.mean(sparsity_loss)
 
-    state = create_sae_train_state(
-        rng, model, learning_rate=config.get("learning_rate"))
-    state, start_epoch = try_restore_for(state, checkpoint_dir, mesh)
+    return total_loss, {'reconstruction_loss': avg_reconstruction_loss, 'sparsity_loss': avg_sparsity_loss}
 
-    for epoch in trange(start_epoch, epochs, desc="Epochs"):
-        epoch_loss = 0.0
-        num_batches = 0
 
-        for batch in train_ds:
-            batch = jax.device_put(batch, sharding)
+def sae_train_step(saes, states, activations, sae_ids, include_sites, sae_type, sparsity_coefficient):
+    new_states = []
+    loss_components_list = []
 
-            state, loss = sae_train_step(state, batch)
-            loss_value = loss.item()
+    for layer_id, site_id in sae_ids:
+        sae_index = layer_id * len(include_sites) + site_id
 
-            epoch_loss += loss_value
-            num_batches += 1
+        sae = saes[sae_index]
+        state = states[sae_index]
+        activation = activations[sae_index]
 
-        avg_epoch_loss = epoch_loss / \
-            num_batches if num_batches > 0 else jnp.inf
+        if sae_type == "relu":
+            def loss_fn(params):
+                return rsae_loss(sae, params, activation, sparsity_coefficient)
+        else:
+            def loss_fn(params):
+                return jsae_loss(sae, params, activation, sparsity_coefficient)
 
-        wandb.log({"train_loss": avg_epoch_loss}, step=epoch + 1)
+        (loss_value, aux), grads = jax.value_and_grad(
+            loss_fn, has_aux=True)(state.params)
 
-        save_checkpoint(checkpoint_dir, epoch + 1, state)
+        state = state.apply_gradients(grads=grads)
+        new_states.append(state)
+        loss_components_list.append(aux)
 
+    return new_states, loss_components_list
+
+
+def train_saes_for(model, config):
+    if not model.tracked:
+        model.tracked = True
+    if config["include_layers"] is None:
+        include_layers = list(range(model.num_layers))
+    else:
+        include_layers = config["include_layers"]
+    if config["include_sites"] is None:
+        include_sites = ["residual_stream", "mlp"]
+    else:
+        include_sites = config["include_sites"]
+
+    if config.get("wandb_run_name") is None:
+        wandb_run_name = f"sae_{config['sae_mult']}x"
+    else:
+        wandb_run_name = config["wandb_run_name"]
+
+    if config.get("sae_type") == "relu":
+        SAE = RSAE
+    else:
+        SAE = JSAE
+
+    sae_dim = config["sae_mult"] * model.d_model
+    rng = jax.random.PRNGKey(0)
+
+    sae_ids = []
+    for layer_id in include_layers:
+        for site_id, _ in enumerate(include_sites):
+            sae_ids.append((layer_id, site_id))
+
+    saes = []
+    states = []
+    for layer_id, site_id in sae_ids:
+        sae = SAE(d_model=model.d_model, hidden_size=sae_dim)
+        sae_rng, rng = jax.random.split(rng)
+        state = create_sae_train_state(sae_rng, sae, config["learning_rate"])
+        saes.append(sae)
+        states.append(state)
+
+    dataset = create_activation_dataset(config["base_dir"],
+                                        include_layers,
+                                        include_sites,
+                                        model.d_model,
+                                        config["batch_size"],
+                                        config["num_epochs"])
+
+    wandb.init(project=config["wandb_project"], name=wandb_run_name)
+
+    total_steps = (config["num_molecules"] //
+                   config["batch_size"]) * config["num_epochs"]
+    if config["num_molecules"] % config["batch_size"] != 0:
+        total_steps += config["num_epochs"]
+
+    progress_bar = tqdm(total=total_steps)
+
+    step = 0
+
+    for batch in dataset:
+        states, loss_components_list = sae_train_step(
+            saes=saes,
+            states=states,
+            activations=batch,
+            sae_ids=sae_ids,
+            include_sites=include_sites,
+            sparsity_coefficient=config["sparsity_coefficient"],
+            sae_type=config["sae_type"])
+
+        step += 1
+
+        loss_logs = {}
+        for (layer_id, site), loss_components in zip(sae_ids, loss_components_list):
+            loss_logs[f"Layer {layer_id+1} {include_sites[site]} Reconstruction Loss"] = loss_components['reconstruction_loss']
+            loss_logs[f"Layer {layer_id+1} {include_sites[site]} Sparsity Loss"] = loss_components['sparsity_loss']
+            loss_logs[f"Layer {layer_id+1} {include_sites[site]} Total Loss"] = loss_components['reconstruction_loss'] + \
+                loss_components['sparsity_loss']
+
+        wandb.log(loss_logs, step=step)
+
+        progress_bar.update(1)
+
+        if step >= total_steps:
+            break
+
+    progress_bar.close()
     wandb.finish()
+
+    for sae_id, (layer_id, site_id) in enumerate(sae_ids):
+        target_dir = f"{config['checkpoint_dir']}/block{layer_id}/{include_sites[site_id]}"
+        os.makedirs(target_dir, exist_ok=True)
+        save_checkpoint(target_dir, step, states[sae_id])
