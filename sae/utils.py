@@ -89,7 +89,7 @@ def get_mod_for_layer(lm, layer_id, sae_config, sites):
         print(f"Restored Residual SAE at step {residual_sae_step}")
         residual_sae_params = residual_sae_state.params
     else:
-        mlp_sae = None
+        residual_sae = None
         residual_sae_state = None
 
     modifiers = (mlp_sae, residual_sae)
