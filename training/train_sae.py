@@ -1,5 +1,6 @@
 import jax
 import optax
+from jax import random
 import jax.numpy as jnp
 from flax.training import train_state
 
@@ -12,7 +13,7 @@ from data.dataset import create_activation_dataset
 from .train_utils import save_checkpoint
 
 
-def create_sae_train_state(rng, sae, learning_rate):
+def create_sae_train_state(sae, rng=random.key(0), learning_rate=0.0):
     params = sae.init(rng, jnp.ones((1, sae.d_model)))['params']
     tx = optax.adam(learning_rate)
 
@@ -23,7 +24,7 @@ def create_sae_train_state(rng, sae, learning_rate):
     )
 
     print(
-        f"Created state with {sum(x.size for x in jax.tree.leaves(params))} parameters.")
+        f"Created SAE state with {sum(x.size for x in jax.tree.leaves(params)):,} parameters.")
 
     return state
 
@@ -124,7 +125,7 @@ def train_saes_for(model, config):
     for layer_id, site_id in sae_ids:
         sae = SAE(d_model=model.d_model, hidden_size=sae_dim)
         sae_rng, rng = jax.random.split(rng)
-        state = create_sae_train_state(sae_rng, sae, config["learning_rate"])
+        state = create_sae_train_state(sae, sae_rng, config["learning_rate"])
         saes.append(sae)
         states.append(state)
 

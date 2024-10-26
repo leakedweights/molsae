@@ -56,7 +56,8 @@ def try_restore_for(item, dir, mesh=None):
                 state = reshard_state(state, mesh)
 
             return state, step
-    except:
+    except Exception as e:
+        print(e)
         return item, 0
 
 

@@ -17,7 +17,7 @@ def create_lm_train_state(model, rng=random.key(0), learning_rate=0.0):
                         jnp.ones((1, 1, 1), dtype=jnp.bool))["params"]
     tx = optax.adam(learning_rate)
     print(
-        f"Created state with {sum(x.size for x in jax.tree.leaves(params))} parameters.")
+        f"Created LM state with {sum(x.size for x in jax.tree.leaves(params)):,} parameters.")
     return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
 
 
