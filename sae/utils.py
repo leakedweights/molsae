@@ -1,11 +1,16 @@
+import os
+import jax.numpy as jnp
+from tqdm.auto import tqdm
+import numpy as np
 import orbax.checkpoint as ocp
+from collections import defaultdict
 
 from lm.model import Decoder
+from lm.model.transformer_utils import causal_mask
 from training.train_lm import create_lm_train_state
 from training.train_utils import try_restore_for
 from .model import RSAE, JSAE
 from training.train_sae import create_sae_train_state
-
 
 def set_modifier_at(layer_id, site_id, lm_params, modifier_params):
     if modifier_params is not None:
@@ -90,9 +95,79 @@ def get_mod_for_layer(lm, layer_id, sae_config, sites):
         residual_sae_params = residual_sae_state.params
     else:
         residual_sae = None
-        residual_sae_state = None
+        residual_sae_params = None
 
     modifiers = (mlp_sae, residual_sae)
     params = (mlp_sae_params, residual_sae_params)
 
     return modifiers, params
+
+
+def save_modifier_activations(lm, params, dataset, tokenizer, output_dir, total, sharding=None):
+    lm.tracked = True
+    os.makedirs(output_dir, exist_ok=True)
+
+    for batch_id, batch in tqdm(enumerate(dataset), total=total):
+        if sharding is not None:
+            batch = jax.device_put(batch, sharding)
+
+        pos = jnp.arange(batch.shape[-1])
+        mask = causal_mask(batch, tokenizer.pad_token_id)
+        _, _, activations = lm.apply({"params": params}, batch, pos, mask)
+
+        batch_mlp_activations = {}
+        batch_residual_activations = {}
+
+        for layer_id, activation in enumerate(activations):
+            mlp_act, residual_act = activation
+
+            if len(mlp_act) != 0:
+                batch_mlp_activations[f'mlp_{layer_id}'] = mlp_act
+            if len(residual_act) != 0:
+                batch_residual_activations[f'residual_{layer_id}'] = residual_act
+
+        if batch_mlp_activations:
+            np.savez_compressed(f"{output_dir}/mlp_activations_batch_{batch_id}.npz", **batch_mlp_activations)
+        if batch_residual_activations:
+            np.savez_compressed(f"{output_dir}/residual_activations_batch_{batch_id}.npz", **batch_residual_activations)
+
+
+def split_activation_dir_fname(fname):
+    model_size, sae_type, sae_mult, sparsity_coefficient = fname.split("-")[1:]
+    return model_size, sae_type, int(sae_mult[:-1]), float(sparsity_coefficient)
+
+def extract_batch_number_from_filename(filepath):
+    filename = os.path.basename(filepath)
+    filename_no_ext = os.path.splitext(filename)[0]
+    parts = filename_no_ext.split('_')
+    batch_str = parts[-1]
+    try:
+        batch_number = int(batch_str)
+    except ValueError:
+        batch_number = -1
+    return batch_number
+
+def get_variant_metadata(variant_activations_dir):
+    variants = defaultdict(list)
+    variant_activations = os.listdir(variant_activations_dir)
+
+    for dir in variant_activations:
+        model_size, sae_type, sae_mult, sparsity_coefficient = split_activation_dir_fname(dir)
+        files = os.listdir(f"{variant_activations_dir}/{dir}")
+        residual_files = [f"{variant_activations_dir}/{dir}/{f}" for f in files if f.endswith(".npz") and f.startswith("residual")]
+        mlp_files = [f"{variant_activations_dir}/{dir}/{f}" for f in files if f.endswith(".npz") and f.startswith("mlp")]
+
+        residual_files_sorted = sorted(residual_files, key=extract_batch_number_from_filename)
+        mlp_files_sorted = sorted(mlp_files, key=extract_batch_number_from_filename)
+
+        variants[f"model-{model_size}"].append({
+            "sae_type": sae_type,
+            "sae_mult": sae_mult,
+            "sparsity_coefficient": sparsity_coefficient,
+            "files": {
+                "residual_stream": residual_files_sorted,
+                "mlp": mlp_files_sorted
+            }
+        })
+
+    return variants
