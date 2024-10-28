@@ -1,4 +1,5 @@
 import os
+import jax
 import jax.numpy as jnp
 from tqdm.auto import tqdm
 import numpy as np
@@ -171,3 +172,47 @@ def get_variant_metadata(variant_activations_dir):
         })
 
     return variants
+
+def get_activation_stats(activation_files, layer_name, sequence_tensor, tokenizer, activation_threshold=0.01):
+    num_neurons = None
+    neuron_fire_counts = None
+    neuron_token_counts = None
+    sequence_activations = []
+    total_tokens_processed = 0
+
+    for batch_idx, act_file in enumerate(tqdm(activation_files, desc='Processing Batches')):
+        activations = np.load(act_file)[layer_name]
+        batch_size, max_seq_length, num_neurons_in_batch = activations.shape
+
+        if neuron_fire_counts is None:
+            num_neurons = num_neurons_in_batch
+            neuron_fire_counts = np.zeros(num_neurons, dtype=np.int64)
+            neuron_token_counts = [defaultdict(int) for _ in range(num_neurons)]
+
+        start_seq_idx = batch_idx * batch_size
+        end_seq_idx = start_seq_idx + batch_size
+        batch_sequences = sequence_tensor[start_seq_idx:end_seq_idx]
+
+        for seq_idx in range(batch_size):
+            sequence = batch_sequences[seq_idx]
+            seq_length = len(sequence)
+            activations_seq = activations[seq_idx][:seq_length]
+
+            tokens = tokenizer.decode(sequence)
+
+            neuron_activation_sums = activations_seq.sum(axis=0)
+            sequence_activations.append(neuron_activation_sums)
+
+            for pos_idx in range(seq_length):
+                token = tokens[pos_idx]
+                activations_pos = activations_seq[pos_idx]
+
+                firing_neurons = np.where(activations_pos > activation_threshold)[0]
+
+                neuron_fire_counts[firing_neurons] += 1
+                total_tokens_processed += 1
+
+                for neuron_idx in firing_neurons:
+                    neuron_token_counts[neuron_idx][token] += 1
+
+    return num_neurons, neuron_fire_counts, neuron_token_counts, total_tokens_processed, sequence_activations
