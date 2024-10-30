@@ -19,11 +19,12 @@ class TransformerBlock(nn.Module):
     modifiers: Optional[tuple[nn.Module]] = None
 
     @nn.compact
-    def __call__(self, x, pos, mask):
+    def __call__(self, x, pos, mask, modifier_args=None):
 
         if self.modifiers is not None:
             assert len(
                 self.modifiers) == 2, "Modifiers must be defined for post-norm MLP and residual stream."
+            assert modifier_args is None or modifier_args.shape[0] == 2
 
         y = nn.RMSNorm()(x)
         y = GroupedQueryAttention(self.d_model,
@@ -43,13 +44,15 @@ class TransformerBlock(nn.Module):
 
         mlp_mod_act = ()
         if self.modifiers is not None and self.modifiers[0] is not None:
-            mlp_post_norm, mlp_mod_act = self.modifiers[0](mlp_post_norm)
+            mlp_post_norm, mlp_mod_act = self.modifiers[0](
+                mlp_post_norm, **modifier_args[0])
 
         residual = x + mlp_post_norm
 
         residual_mod_act = ()
         if self.modifiers is not None and self.modifiers[1] is not None:
-            residual, residual_mod_act = self.modifiers[1](residual)
+            residual, residual_mod_act = self.modifiers[1](
+                residual, **modifier_args[1])
 
         if self.tracked:
             extras = (mlp_post_norm, residual), (mlp_mod_act, residual_mod_act)
@@ -74,7 +77,7 @@ class Decoder(nn.Module):
     modifiers: Optional[list[tuple[nn.Module]]] = None
 
     @nn.compact
-    def __call__(self, x, pos, mask, aux_ids=()):
+    def __call__(self, x, pos, mask, aux_ids=(), modifier_args=None):
         activations = []
         modifier_activations = []
         embedder = Embedder(self.vocab_size, self.d_model)
@@ -83,9 +86,11 @@ class Decoder(nn.Module):
         if self.modifiers is not None:
             assert len(
                 self.modifiers) == self.num_layers, "Modifier tuples must be defined for every layer. Use `None` for empty modifiers"
+            assert modifier_args is None or modifier_args.shape[0] == self.num_layers
             modifiers = self.modifiers
         else:
             modifiers = [(None, None)] * self.num_layers
+            modifier_args = [None] * self.num_layers
 
         for block_id in range(self.num_layers):
             x, (actv, modifier_actv) = TransformerBlock(self.d_model,
@@ -96,7 +101,7 @@ class Decoder(nn.Module):
                                                         self.layer_logit_cap,
                                                         self.f_embed,
                                                         self.tracked,
-                                                        modifiers[block_id])(x, pos, mask)
+                                                        modifiers[block_id])(x, pos, mask, modifier_args[block_id])
 
             if self.tracked and (not aux_ids or block_id in aux_ids):
                 activations.append(actv)

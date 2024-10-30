@@ -101,9 +101,10 @@ class RSAE(nn.Module):
     d_model: int
     hidden_size: int
     use_pre_enc_bias: bool = True
+    guidance_type: str = "add"
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, *, activation_mods=None):
         W_enc = self.param(
             'W_enc', nn.initializers.glorot_uniform(), (self.d_model, self.hidden_size))
         b_enc = self.param('b_enc', nn.initializers.zeros, (self.hidden_size,))
@@ -116,6 +117,18 @@ class RSAE(nn.Module):
 
         pre_activations = x @ W_enc + b_enc
         feature_magnitudes = nn.relu(pre_activations)
+
+        if activation_mods is not None:
+            if self.guidance_type == "add":
+                feature_magnitudes += activation_mods
+            elif self.guidance_type == "scale":
+                feature_magnitudes *= activation_mods
+            elif self.guidance_type == "delete":
+                feature_magnitudes = jnp.where(
+                    activation_mods, 0.0, activation_mods)
+            else:
+                raise ValueError(
+                    "SAE modification must either be addition, scaling, or deletion.")
 
         x_reconstructed = feature_magnitudes @ W_dec + b_dec
         return x_reconstructed, feature_magnitudes

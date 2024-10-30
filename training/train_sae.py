@@ -66,12 +66,10 @@ def sae_train_step(saes, states, activations, sae_ids, include_sites, sae_type, 
     new_states = []
     loss_components_list = []
 
-    for layer_id, site_id in sae_ids:
-        sae_index = layer_id * len(include_sites) + site_id
-
-        sae = saes[sae_index]
-        state = states[sae_index]
-        activation = activations[sae_index]
+    for index, (layer_id, site_id) in enumerate(sae_ids):
+        sae = saes[index]
+        state = states[index]
+        activation = activations[index]
 
         if sae_type == "relu":
             def loss_fn(params):
