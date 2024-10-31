@@ -24,7 +24,7 @@ class TransformerBlock(nn.Module):
         if self.modifiers is not None:
             assert len(
                 self.modifiers) == 2, "Modifiers must be defined for post-norm MLP and residual stream."
-            assert modifier_args is None or modifier_args.shape[0] == 2
+            assert modifier_args is None or len(modifier_args) == 2
 
         y = nn.RMSNorm()(x)
         y = GroupedQueryAttention(self.d_model,
@@ -90,7 +90,9 @@ class Decoder(nn.Module):
             modifiers = self.modifiers
         else:
             modifiers = [(None, None)] * self.num_layers
-            modifier_args = [None] * self.num_layers
+
+        if modifier_args is None:
+            modifier_args = [({}, {})] * self.num_layers
 
         for block_id in range(self.num_layers):
             x, (actv, modifier_actv) = TransformerBlock(self.d_model,
