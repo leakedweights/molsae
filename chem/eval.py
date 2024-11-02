@@ -6,6 +6,7 @@ from rdkit.Contrib.SA_Score import sascorer
 from tqdm.auto import tqdm
 
 RDLogger.DisableLog('rdApp.error')
+RDLogger.DisableLog('rdApp.warning')
 
 
 def clean_molecule(raw_str, tokenizer):
