@@ -25,7 +25,7 @@ def calculate_molecule_properties(smiles_str):
         logp_value = Descriptors.MolLogP(mol)
         mol_wt = Descriptors.MolWt(mol)
         mol_len = mol.GetNumAtoms()
-        sa_score = sascorer.calculateScore(m)
+        sa_score = sascorer.calculateScore(mol)
 
         return True, qed_value, logp_value, mol_wt, mol_len, sa_score
     except Exception as e:

@@ -7,8 +7,14 @@ from .model.transformer_utils import causal_mask
 
 
 @partial(jax.jit, static_argnums=(1, 7, 8))
-def generate_next_token(key, apply_fn, params, tokens, position, mask, forbidden_tokens=None, temperature=1.0, top_k=-1):
-    logits = apply_fn({"params": params}, tokens, position, mask)
+def generate_next_token(key, apply_fn, params, tokens, position, mask, mod_params=None, forbidden_tokens=None, temperature=1.0, top_k=-1):
+
+    if mod_params is not None:
+        logits = apply_fn({"params": params}, tokens,
+                          position, mask, mod_params=mod_params)
+    else:
+        logits = apply_fn({"params": params}, tokens, position, mask)
+        
     logits = logits[:, -1, :]
 
     if top_k > 0:

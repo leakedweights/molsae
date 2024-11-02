@@ -119,6 +119,10 @@ class RSAE(nn.Module):
         feature_magnitudes = nn.relu(pre_activations)
 
         if activation_mods is not None:
+            if activation_mods.ndim == feature_magnitudes.shape[1:]:
+                activation_mods = jnp.broadcast_to(
+                    activation_mods, feature_magnitudes.shape)
+            assert feature_magnitudes.shape == activation_mods.shape, "SAE activation modifiers must be the same shape as latent dimension."
             if self.guidance_type == "add":
                 feature_magnitudes += activation_mods
             elif self.guidance_type == "scale":
