@@ -16,7 +16,6 @@ def save_molecule_as_svg(mol, filename, highlight_atoms=None, highlight_bonds=No
     options.addBondIndices = True
     options.fixedBondLength = 30
     options.circleAtoms = False
-    options.atomLabels = {}
 
     drawer.DrawMolecule(mol, highlightAtoms=highlight_atoms,
                         highlightBonds=highlight_bonds)

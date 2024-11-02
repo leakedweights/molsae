@@ -77,7 +77,7 @@ class Decoder(nn.Module):
     modifiers: Optional[list[tuple[nn.Module]]] = None
 
     @nn.compact
-    def __call__(self, x, pos, mask, aux_ids=(), modifier_args=None):
+    def __call__(self, x, pos, mask, modifier_args=None, aux_ids=()):
         activations = []
         modifier_activations = []
         embedder = Embedder(self.vocab_size, self.d_model)
@@ -86,7 +86,7 @@ class Decoder(nn.Module):
         if self.modifiers is not None:
             assert len(
                 self.modifiers) == self.num_layers, "Modifier tuples must be defined for every layer. Use `None` for empty modifiers"
-            assert modifier_args is None or modifier_args.shape[0] == self.num_layers
+            assert modifier_args is None or len(modifier_args) == self.num_layers
             modifiers = self.modifiers
         else:
             modifiers = [(None, None)] * self.num_layers
