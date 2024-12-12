@@ -68,7 +68,7 @@ h5py==3.12.1
 tf-slim==1.1.0
 fastjsonschema==2.20.0
 en-core-web-sm==3.7.1
-ipython==7.34.0
+ipython==8.10.0
 google==2.0.3
 jupyterlab_widgets==3.0.13
 referencing==0.35.1
