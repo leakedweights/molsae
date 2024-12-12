@@ -295,7 +295,7 @@ lazr.restfulclient==0.14.4
 lazr.uri==1.0.6
 six==1.16.0
 pyparsing==2.4.7
-cryptography==3.4.8
+cryptography==43.0.1
 PyJWT==2.3.0
 importlib-metadata==4.6.4
 keyring==23.5.0
