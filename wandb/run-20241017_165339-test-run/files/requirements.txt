@@ -262,7 +262,7 @@ jupyter-console==6.1.0
 tensorflow-datasets==4.9.6
 pygame==2.6.1
 regex==2024.9.11
-jupyter-server==1.24.0
+jupyter-server==2.11.2
 requests==2.32.3
 gensim==4.3.3
 beautifulsoup4==4.12.3
